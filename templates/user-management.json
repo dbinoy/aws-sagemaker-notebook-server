@@ -1,0 +1,187 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Create Cognito based user management resources",
+    "Parameters": {
+        "AdminUsername": {
+            "Type": "String"        },
+        "AdminEmail": {
+            "Type": "String"
+        },
+        "HostingBucket": {
+            "Type": "String"
+        },
+        "LambdaS3ExecutionRoleArn": {
+            "Type": "String"
+        }                     
+    },
+    "Resources": { 
+        "SageServerUserPool": {
+            "Type" : "AWS::Cognito::UserPool",
+                "Properties" : {
+                "AdminCreateUserConfig" : {
+                    "AllowAdminCreateUserOnly" : false,
+                    "InviteMessageTemplate" : {
+                        "EmailMessage" : "You have been invited as an user to our SageMaker Server. You can use this platform to browse and use SageMaker NoteBooks. Your username is {username} and temporary password is {####}.",
+                        "EmailSubject" : "Welcome to SageServer"                    },
+                    "UnusedAccountValidityDays" : 7
+                },
+                "AliasAttributes" : [ "email", "preferred_username" ],
+                "AutoVerifiedAttributes" : [ "email" ],
+                "EmailVerificationMessage" : "Your verification code is {####}.",
+                "EmailVerificationSubject" : "Your verification code",
+                "MfaConfiguration" : "OFF",
+                "Policies" : {
+                    "PasswordPolicy" : {
+                        "MinimumLength" : 6,
+                        "RequireLowercase" : true,
+                        "RequireNumbers" : true,
+                        "RequireSymbols" : false,
+                        "RequireUppercase" : false
+                    }
+                },
+                "UserPoolName" : "SageServerUserPool"
+            }
+        },
+        "AdminUser" : {
+            "Type" : "AWS::Cognito::UserPoolUser",
+            "DependsOn": [
+                "SageServerUserPool"
+            ],            
+            "Properties" : {
+                "DesiredDeliveryMediums" : [ "EMAIL" ],
+                "ForceAliasCreation" : false,
+                "Username" : {"Ref": "AdminUsername"},
+                "UserAttributes" : [ 
+                    {
+                        "Name" : "email",
+                        "Value" : {"Ref": "AdminEmail"}
+                    }                  
+                ],
+                "UserPoolId" : {"Ref": "SageServerUserPool"}
+            }
+        },
+        "SageServerAppClient" : {
+            "Type" : "AWS::Cognito::UserPoolClient",
+            "DependsOn": [
+                "SageServerUserPool"
+            ],             
+            "Properties" : {
+                "ClientName" : "SageServerAppClient",
+                "GenerateSecret" : false,
+                "RefreshTokenValidity" : 7,
+                "UserPoolId" : {"Ref": "SageServerUserPool"}
+            }
+        },
+        "SageServerIdentityPool" : {
+            "Type" : "AWS::Cognito::IdentityPool",
+            "DependsOn": [
+                "SageServerUserPool",
+                "SageServerAppClient"
+            ],                  
+            "Properties" : {
+                "IdentityPoolName" : "SageServerIdentityPool",
+                "AllowUnauthenticatedIdentities" : false, 
+                "CognitoIdentityProviders" : 
+                [ 
+                    {
+                        "ClientId" : {"Ref": "SageServerAppClient"},
+                        "ProviderName" : {"Fn::GetAtt" : ["SageServerUserPool", "ProviderName"] }
+                    }                    
+                ]
+            }
+        },
+        "UpdateJavascriptConfigWithCognitoFunction": {
+            "Type": "AWS::Lambda::Function",
+            "DependsOn": "SageServerAppClient",
+            "Properties": {
+                "Description" : "Adds User Pool information to the config.js file",
+                "Handler": "index.handler",
+                "Role": {"Ref" : "LambdaS3ExecutionRoleArn"},
+                "Code": {
+                    "ZipFile" : { "Fn::Join" : ["\n", [
+                        "import json",
+                        "import boto3",
+                        "import cfnresponse",
+                        "s3 = boto3.resource('s3')",
+                        "def create(properties, physical_id):",
+                        "    userPoolId = properties['UserPool']",
+                        "    clientId = properties['Client']",
+                        "    region = properties['Region']",
+                        "    bucket = properties['Bucket']",
+                        "    config_content = '''",
+                        "    var _config = {",
+                        "    cognito: {",
+                        "        userPoolId: '%s',",
+                        "        userPoolClientId: '%s',",
+                        "        region: '%s',",
+                        "    }",
+                        "    api: {",
+                        "        invokeUrl: 'Base URL of your API including the stage',",
+                        "    }",
+                        "};",
+                        "'''",    
+                        "    config_content = config_content % (userPoolId, clientId, region)",
+                        "    config = s3.Object(bucket,'js/config.js')",
+                        "    config.put(Body=config_content)",
+                        "    return cfnresponse.SUCCESS, None",
+                        "def update(properties, physical_id):",
+                        "    return create(properties, physical_id)",
+                        "def delete(properties, physical_id):",
+                        "    return cfnresponse.SUCCESS, physical_id",
+                        "def handler(event, context):",
+                        "    print('Received event: ' + json.dumps(event))",
+                        "    status = cfnresponse.FAILED",
+                        "    new_physical_id = None",
+                        "    try:",
+                        "        properties = event.get('ResourceProperties')",
+                        "        physical_id = event.get('PhysicalResourceId')",
+                        "        status, new_physical_id = {",
+                        "            'Create': create,",
+                        "            'Update': update,",
+                        "            'Delete': delete",
+                        "        }.get(event['RequestType'], lambda x, y: (cfnresponse.FAILED, None))(properties, physical_id)",
+                        "    except Exception as e:",
+                        "        print('Exception: ' + e)",
+                        "        status = cfnresponse.FAILED",
+                        "    finally:",
+                        "        cfnresponse.send(event, context, status, {}, new_physical_id)"
+                    ]]}
+                },
+                "Runtime": "python3.6",
+                "Timeout": "30",
+                "TracingConfig": {
+                    "Mode": "Active"
+                }
+            }
+        },
+        "UpdateJavascriptConfigWithCognitoCustom": {
+            "Type": "Custom::ConfigFile",
+            "DependsOn": [
+                "SageServerUserPool",
+                "SageServerAppClient",
+                "UpdateJavascriptConfigWithCognitoFunction"
+            ],
+            "Properties": {
+                "ServiceToken": { "Fn::GetAtt" : ["UpdateJavascriptConfigWithCognitoFunction", "Arn"] },
+                "UserPool": {"Ref" : "SageServerUserPool"},
+                "Client": {"Ref" : "SageServerAppClient"},
+                "Region": {"Ref" : "AWS::Region"},
+                "Bucket": {"Ref" : "HostingBucket"}
+            }
+        }        
+    },
+    "Outputs": {
+        "SageServerUserPool": {
+            "Value": {"Ref": "SageServerUserPool"},
+            "Description": "Cognito User Pool Id"
+        },
+        "SageServerAppClient": {
+            "Value": {"Ref": "SageServerAppClient"},
+            "Description": "App Client Id for Cognito User Pool"
+        },
+        "SageServerIdentityPool": {
+            "Value": {"Ref": "SageServerIdentityPool"},
+            "Description": "Identity Pool Id for IDP authorized by Cognito User Pool"
+        }                  
+    }    
+}

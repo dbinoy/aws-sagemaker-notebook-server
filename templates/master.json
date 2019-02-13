@@ -1,0 +1,142 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Manage and serve SageMaker notebook using Cognito for your customers",
+    "Parameters": {
+        "AssetBucket": {
+            "Type": "String",
+            "Description": "Source Bucket containing the template and web assets",
+            "Default": "sageserver-web-assets"
+        },
+        "WebAssetPrefix": {
+            "Type": "String",
+            "Description": "S3 Prefix in Source Bucket containing the web assets",
+            "Default": "webui"
+        },
+        "TemplateAssetPrefix": {
+            "Type": "String",
+            "Description": "S3 Prefix in Source Bucket containing the web assets",
+            "Default": "templates"
+        },        
+        "AdminUsername": {
+            "Type": "String",
+            "Description": "The username for the administrator",
+            "Default": "admin"
+        },
+        "AdminEmail": {
+            "Type": "String",
+            "Description": "will be used to setup initial password to log into admin interface"
+        },
+        "HostingBucket" :{
+            "Type": "String",
+            "Description": " The name for the bucket hosting your website, e.g. 'sageserver-yourname'.",
+            "AllowedPattern": "^([a-z]|(\\d(?!\\d{0,2}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})))([a-z\\d]|(\\.(?!(\\.|-)))|(-(?!\\.))){1,61}[a-z\\d\\.]$",
+            "Default": "sageserver-aws-customer",
+            "ConstraintDescription" : "Should be a Valid S3 Bucket Name"
+        }             
+    },
+    "Resources": {
+        "LambdaS3ExecutionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lambda.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "root",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:CreateLogGroup",
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents",
+                                        "s3:ListBucket",
+                                        "s3:GetObject",
+                                        "s3:PutObject",
+                                        "s3:PutObjectAcl",
+                                        "s3:PutObjectVersionAcl",
+                                        "s3:DeleteObject",
+                                        "s3:DeleteObjectVersion",
+                                        "s3:CopyObject",
+                                        "xray:PutTraceSegments"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },          
+        "WebUiStack": {
+            "Type": "AWS::CloudFormation::Stack",
+            "DependsOn": [
+                "LambdaS3ExecutionRole"
+            ],             
+            "Properties": {
+                "Parameters": {
+                    "AssetBucket": {"Ref": "AssetBucket"},
+                    "WebAssetPrefix": {"Ref": "WebAssetPrefix"},
+                    "HostingBucket": {"Ref": "HostingBucket"},
+                    "LambdaS3ExecutionRoleArn": { "Fn::GetAtt" : ["LambdaS3ExecutionRole", "Arn"] }                    
+                },
+                "TemplateURL": {
+                    "Fn::Sub": "https://s3.amazonaws.com/${AssetBucket}/${TemplateAssetPrefix}/webui.json"
+                }
+            }
+        },        
+        "UserManagementStack": {
+            "Type": "AWS::CloudFormation::Stack",
+            "DependsOn": [
+                "LambdaS3ExecutionRole",
+                "WebUiStack"
+            ],            
+            "Properties": {
+                "Parameters": {
+                    "AdminUsername": {"Ref": "AdminUsername"},
+                    "AdminEmail": {"Ref": "AdminEmail"},
+                    "HostingBucket": {"Ref": "HostingBucket"},
+                    "LambdaS3ExecutionRoleArn": { "Fn::GetAtt" : ["LambdaS3ExecutionRole", "Arn"] } 
+                },
+                "TemplateURL": {
+                    "Fn::Sub": "https://s3.amazonaws.com/${AssetBucket}/${TemplateAssetPrefix}/user-management.json"
+                }
+            }
+        }
+    },
+    "Outputs": {
+        "SageServerUserPool": {
+            "Value": {"Fn::Sub": "${UserManagementStack.Outputs.SageServerUserPool}"},
+            "Description": "Cognito User Pool Id"
+        },
+        "SageServerAppClient": {
+            "Value": {"Fn::Sub": "${UserManagementStack.Outputs.SageServerAppClient}"},
+            "Description": "App Client Id for Cognito User Pool"
+        },
+        "SageServerIdentityPool": {
+            "Value": {"Fn::Sub": "${UserManagementStack.Outputs.SageServerIdentityPool}"},
+            "Description": "Identity Pool Id for IDP authorized by Cognito User Pool"
+        },
+        "WebappURL": {
+            "Value": {"Fn::Sub": "${WebUiStack.Outputs.WebappURL}"},
+            "Description" : "URL for Sage Server webapp"
+        }                              
+    }    
+}

@@ -1,0 +1,125 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Deploy the Web frontend for SageServer",
+    "Parameters": {
+        "AssetBucket": {
+            "Type": "String"
+        },
+        "WebAssetPrefix": {
+            "Type": "String"
+        },
+        "HostingBucket": {
+            "Type": "String"
+        },
+        "LambdaS3ExecutionRoleArn": {
+            "Type": "String"
+        }     
+    },    
+    "Resources": {
+        "WebsiteBucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+                "BucketName" : {"Ref" : "HostingBucket"},
+                "LifecycleConfiguration": {
+                    "Rules": [
+                        {
+                            "NoncurrentVersionExpirationInDays": 1,
+                            "Status": "Enabled"
+                        }
+                    ]
+                },
+                 "VersioningConfiguration": {
+                    "Status": "Enabled"
+                },                
+                "WebsiteConfiguration": {
+                    "IndexDocument": "index.html"
+                }
+            },
+            "DeletionPolicy" : "Retain"
+        },          
+        "CopySourceFilesFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Description" : "Copies objects from a source S3 bucket to a destination",
+                "Handler": "index.handler",
+                "Role": {"Ref" : "LambdaS3ExecutionRoleArn"},
+                "Code": {
+                    "ZipFile" : { "Fn::Join" : ["\n", [
+                        "import os",
+                        "import json",
+                        "import boto3",
+                        "import logging",
+                        "import cfnresponse",
+                        "from botocore.exceptions import ClientError",
+                        "s3 = boto3.client('s3')",
+                        "logger = logging.getLogger()",
+                        "logger.setLevel(logging.INFO)",
+                        "def handler(event, context):",
+                        "    logger.info('Received event:' + json.dumps(event))",
+                        "    source_bucket = event['ResourceProperties']['SourceBucket']",
+                        "    source_prefix = event['ResourceProperties'].get('SourceKeyPrefix') or ''",
+                        "    bucket = event['ResourceProperties']['Bucket']",
+                        "    prefix = event['ResourceProperties'].get('Prefix') or ''",
+                        "    result = cfnresponse.SUCCESS",
+                        "    try:",
+                        "        if event['RequestType'] == 'Create' or event['RequestType'] == 'Update':",
+                        "            result = copy_objects(source_bucket, source_prefix, bucket, prefix)",
+                        "        elif event['RequestType'] == 'Delete':",
+                        "            result = delete_objects(bucket, prefix)",
+                        "    except ClientError as e:",
+                        "        logger.error('Error: '+e)",
+                        "        result = cfnresponse.FAILED",
+                        "    cfnresponse.send(event, context, result, {})",
+                        "def copy_objects(source_bucket, source_prefix, bucket, prefix):",
+                        "    paginator = s3.get_paginator('list_objects_v2')",
+                        "    page_iterator = paginator.paginate(Bucket=source_bucket, Prefix=source_prefix)",
+                        "    for key in {x['Key'] for page in page_iterator for x in page['Contents']}:",
+                        "        dest_key = os.path.join(prefix, os.path.relpath(key, source_prefix))",
+                        "        if not key.endswith('/'):",
+                        "            print('copy {} to {}'.format(key, dest_key))",
+                        "            s3.copy_object(CopySource={'Bucket': source_bucket, 'Key': key}, Bucket=bucket, Key = dest_key)",
+                        "    return cfnresponse.SUCCESS",
+                        "def delete_objects(bucket, prefix):",
+                        "    paginator = s3.get_paginator('list_objects_v2')",
+                        "    page_iterator = paginator.paginate(Bucket=bucket, Prefix=prefix)",
+                        "    objects = [{'Key': x['Key']} for page in page_iterator for x in page['Contents']]",
+                        "    s3.delete_objects(Bucket=bucket, Delete={'Objects': objects})",
+                        "    return cfnresponse.SUCCESS"
+                    ]]}
+                },
+                "Runtime": "python3.6",
+                "Timeout": "30",
+                "TracingConfig": {
+                    "Mode": "Active"
+                }
+            }
+        },   
+        "WebsiteContentCustom": {
+            "Type": "Custom::S3Objects",
+            "DependsOn": [
+                "WebsiteBucket",
+                "CopySourceFilesFunction"
+            ],              
+            "Properties": {
+                "ServiceToken": { "Fn::GetAtt" : ["CopySourceFilesFunction", "Arn"] },
+                "SourceBucket": {"Ref" : "AssetBucket"},
+                "SourceKeyPrefix": {"Ref" : "WebAssetPrefix"},
+                "Bucket": {"Ref" : "HostingBucket"}
+            }
+        }             
+    },
+    "Outputs" : {
+        "HostingBucket" : {
+            "Description" : "S3 Bucket used to serve webapp",
+            "Value" : {
+                "Ref" : "WebsiteBucket"
+            }
+        },
+        "WebappURL": {
+            "Description" : "URL for Sage Server webapp",
+            "Value": {
+                "Fn::Join": ["/", [{"Fn::GetAtt" : [ "WebsiteBucket" , "WebsiteURL" ]}, "index.html"]]
+            }
+        }
+    }    
+}
