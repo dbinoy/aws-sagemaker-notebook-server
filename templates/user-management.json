@@ -17,28 +17,9 @@
     "Resources": { 
         "SageServerUserPool": {
             "Type" : "AWS::Cognito::UserPool",
-                "Properties" : {
-                "AdminCreateUserConfig" : {
-                    "AllowAdminCreateUserOnly" : false,
-                    "InviteMessageTemplate" : {
-                        "EmailMessage" : "You have been invited as an user to our SageMaker Server. You can use this platform to browse and use SageMaker NoteBooks. Your username is {username} and temporary password is {####}.",
-                        "EmailSubject" : "Welcome to SageServer"                    },
-                    "UnusedAccountValidityDays" : 7
-                },
-                "AliasAttributes" : [ "email", "preferred_username" ],
-                "AutoVerifiedAttributes" : [ "email" ],
-                "EmailVerificationMessage" : "Your verification code is {####}.",
-                "EmailVerificationSubject" : "Your verification code",
-                "MfaConfiguration" : "OFF",
-                "Policies" : {
-                    "PasswordPolicy" : {
-                        "MinimumLength" : 6,
-                        "RequireLowercase" : true,
-                        "RequireNumbers" : true,
-                        "RequireSymbols" : false,
-                        "RequireUppercase" : false
-                    }
-                },
+            "Properties" : {
+                "AliasAttributes" : ["email"],
+                "AutoVerifiedAttributes" : ["email"],
                 "UserPoolName" : "SageServerUserPool"
             }
         },
