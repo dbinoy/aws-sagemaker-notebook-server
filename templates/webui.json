@@ -77,7 +77,7 @@
                         "        dest_key = os.path.join(prefix, os.path.relpath(key, source_prefix))",
                         "        if not key.endswith('/'):",
                         "            print('copy {} to {}'.format(key, dest_key))",
-                        "            s3.copy_object(CopySource={'Bucket': source_bucket, 'Key': key}, Bucket=bucket, Key = dest_key)",
+                        "            s3.copy_object(ACL='public-read', CopySource={'Bucket': source_bucket, 'Key': key}, Bucket=bucket, Key = dest_key)",
                         "    return cfnresponse.SUCCESS",
                         "def delete_objects(bucket, prefix):",
                         "    paginator = s3.get_paginator('list_objects_v2')",
