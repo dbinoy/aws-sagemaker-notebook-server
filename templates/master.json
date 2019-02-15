@@ -2,7 +2,7 @@
     "AWSTemplateFormatVersion": "2010-09-09",
     "Description": "Manage and serve SageMaker notebook using Cognito for your customers",
     "Parameters": {
-        "AssetBucket": {
+        "WebAssetBucket": {
             "Type": "String",
             "Description": "Source Bucket containing the template and web assets",
             "Default": "sageserver-web-assets"
@@ -12,19 +12,15 @@
             "Description": "S3 Prefix in Source Bucket containing the web assets",
             "Default": "webui"
         },
+        "TemplateAssetBucket": {
+            "Type": "String",
+            "Description": "Source Bucket containing the template and web assets",
+            "Default": "sageserver-web-assets"
+        },        
         "TemplateAssetPrefix": {
             "Type": "String",
             "Description": "S3 Prefix in Source Bucket containing the web assets",
             "Default": "templates"
-        },        
-        "AdminUsername": {
-            "Type": "String",
-            "Description": "The username for the administrator",
-            "Default": "admin"
-        },
-        "AdminEmail": {
-            "Type": "String",
-            "Description": "will be used to setup initial password to log into admin interface"
         },
         "HostingBucket" :{
             "Type": "String",
@@ -92,13 +88,13 @@
             ],             
             "Properties": {
                 "Parameters": {
-                    "AssetBucket": {"Ref": "AssetBucket"},
+                    "WebAssetBucket": {"Ref": "WebAssetBucket"},
                     "WebAssetPrefix": {"Ref": "WebAssetPrefix"},
                     "HostingBucket": {"Ref": "HostingBucket"},
                     "LambdaS3ExecutionRoleArn": { "Fn::GetAtt" : ["LambdaS3ExecutionRole", "Arn"] }                    
                 },
                 "TemplateURL": {
-                    "Fn::Sub": "https://s3.amazonaws.com/${AssetBucket}/${TemplateAssetPrefix}/webui.json"
+                    "Fn::Sub": "https://s3.amazonaws.com/${TemplateAssetBucket}/${TemplateAssetPrefix}/webui.json"
                 }
             }
         },        
@@ -110,33 +106,49 @@
             ],            
             "Properties": {
                 "Parameters": {
-                    "AdminUsername": {"Ref": "AdminUsername"},
-                    "AdminEmail": {"Ref": "AdminEmail"},
                     "HostingBucket": {"Ref": "HostingBucket"},
                     "LambdaS3ExecutionRoleArn": { "Fn::GetAtt" : ["LambdaS3ExecutionRole", "Arn"] } 
                 },
                 "TemplateURL": {
-                    "Fn::Sub": "https://s3.amazonaws.com/${AssetBucket}/${TemplateAssetPrefix}/user-management.json"
+                    "Fn::Sub": "https://s3.amazonaws.com/${TemplateAssetBucket}/${TemplateAssetPrefix}/user-management.json"
                 }
             }
-        }
+        },
+        "APILayerStack": {
+            "Type": "AWS::CloudFormation::Stack",
+            "DependsOn": [
+                "LambdaS3ExecutionRole",
+                "WebUiStack",
+                "UserManagementStack"
+            ],            
+            "Properties": {
+                "Parameters": {
+                    "HostingBucket": {"Ref": "HostingBucket"},
+                    "LambdaS3ExecutionRoleArn": { "Fn::GetAtt" : ["LambdaS3ExecutionRole", "Arn"] }, 
+                    "CognitoUserPoolArn": {"Fn::Sub": "${UserManagementStack.Outputs.SageServerUserPoolARN}"}
+                },
+                "TemplateURL": {
+                    "Fn::Sub": "https://s3.amazonaws.com/${TemplateAssetBucket}/${TemplateAssetPrefix}/api-layer.json"
+                }
+            }
+        }        
     },
     "Outputs": {
         "SageServerUserPool": {
-            "Value": {"Fn::Sub": "${UserManagementStack.Outputs.SageServerUserPool}"},
+            "Value": {"Fn::Sub": "${UserManagementStack.Outputs.SageServerUserPoolId}"},
             "Description": "Cognito User Pool Id"
         },
         "SageServerAppClient": {
             "Value": {"Fn::Sub": "${UserManagementStack.Outputs.SageServerAppClient}"},
             "Description": "App Client Id for Cognito User Pool"
         },
-        "SageServerIdentityPool": {
-            "Value": {"Fn::Sub": "${UserManagementStack.Outputs.SageServerIdentityPool}"},
-            "Description": "Identity Pool Id for IDP authorized by Cognito User Pool"
-        },
         "WebappURL": {
             "Value": {"Fn::Sub": "${WebUiStack.Outputs.WebappURL}"},
             "Description" : "URL for Sage Server webapp"
-        }                              
+        },
+        "APIEndpoint": {
+            "Value": {"Fn::Sub": "${APILayerStack.Outputs.APIEndpoint}"},
+            "Description" : "URL for Sage Server webapp"
+        }                                       
     }    
 }

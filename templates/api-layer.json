@@ -1,0 +1,346 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Create Cognito based user management resources",
+    "Parameters": {
+        "HostingBucket": {
+            "Type": "String"
+        },
+        "LambdaS3ExecutionRoleArn": {
+            "Type": "String"
+        },
+        "CognitoUserPoolArn": {
+            "Type": "String"
+        }                               
+    },
+    "Resources": {
+        "LambdaSMNoteBookExecutionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lambda.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "root",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:CreateLogGroup",
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents",
+                                        "sagemaker:CreatePresignedNotebookInstanceUrl",
+                                        "ssagemaker:DescribeNotebookInstance",
+                                        "sagemaker:ListNotebookInstanceLifecycleConfigs",
+                                        "sagemaker:ListNotebookInstances",
+                                        "xray:PutTraceSegments"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },        
+        "ListNotebookInstances": {
+            "Type": "AWS::Lambda::Function",
+            "DependsOn": [
+                "LambdaSMNoteBookExecutionRole"
+            ],             
+            "Properties": {
+                "Description" : "Invoke Comprehend to predict sentiment of feedback provided by customers.",
+                "Handler": "index.handler",
+                "Role": { "Fn::GetAtt" : ["LambdaSMNoteBookExecutionRole", "Arn"] },
+                "Code": {
+                    "ZipFile" : { "Fn::Join" : ["\n", [
+                        "import json",
+                        "import datetime",
+                        "import boto3",                        
+                        "def dateconverter(o):",
+                        "    if isinstance(o, datetime.datetime):",
+                        "        return o.__str__()",                                
+                        "def handler(event, context):",                        
+                        "    sm = boto3.client('sagemaker')",
+                        "    instances = []",
+                        "    nexttoken = None",
+                        "    while True:",
+                        "        response = sm.list_notebook_instances() if nexttoken is None else sm.list_notebook_instances(NextToken=nexttoken)",
+                        "        instances.extend(response['NotebookInstances'])",
+                        "        nexttoken = response['NextToken'] if 'NextToken' in response.keys() else None",
+                        "        if nexttoken is None:",
+                        "            break",                                
+                        "    return {",
+                        "        'statusCode': 200,",
+                        "        'body': json.dumps(instances, default=dateconverter)",
+                        "    }"                                               
+                    ]]}
+                },
+                "Runtime": "python3.6",
+                "Timeout": "60",
+                "TracingConfig": {
+                    "Mode": "Active"
+                }
+            }
+        },
+        "SageServerAPI": {
+            "Type": "AWS::ApiGateway::RestApi",
+            "DependsOn": "ListNotebookInstances",
+            "Properties": {
+                "Name": "Sage Server API",
+                "Description" : "API to operate upon SageMaker Notebook Instances",
+                "FailOnWarnings": true,
+                "Body": {
+                    "swagger":"2.0",
+                    "info":{
+                        "version":"2018-02-16T18:05:24Z",
+                        "title":"Sage Server API"
+                    },
+                    "host":"zejy1hx0p0.execute-api.us-west-2.amazonaws.com",
+                    "basePath":"/test",
+                    "schemes":[
+                        "https"
+                    ],
+                    "paths":{
+                        "/listnotebookinstances":{
+                            "get":{
+                                "consumes":[
+                                    "application/json"
+                                ],
+                                "produces":[
+                                    "application/json"
+                                ],
+                                "responses":{
+                                    "200":{
+                                        "description":"200 response",
+                                        "schema":{
+                                            "$ref":"#/definitions/Empty"
+                                        },
+                                        "headers":{
+                                            "Access-Control-Allow-Origin":{
+                                                "type":"string"
+                                            }
+                                        }
+                                    }
+                                },
+                                "x-amazon-apigateway-integration":{
+                                    "responses":{
+                                        "default":{
+                                            "statusCode":"200",
+                                            "responseParameters":{
+                                                "method.response.header.Access-Control-Allow-Origin":"'*'"
+                                            }
+                                        }
+                                    },
+                                    "uri": {"Fn::Join": ["",
+                                        ["arn:aws:apigateway:", {"Ref": "AWS::Region"}, ":lambda:path/2015-03-31/functions/", {"Fn::GetAtt": ["ListNotebookInstances", "Arn"]}, "/invocations"]
+                                    ]},
+                                    "passthroughBehavior":"when_no_templates",
+                                    "httpMethod":"POST",
+                                    "contentHandling":"CONVERT_TO_TEXT",
+                                    "type":"aws"
+                                }
+                            },
+                            "options":{
+                                "consumes":[
+                                    "application/json"
+                                ],
+                                "produces":[
+                                    "application/json"
+                                ],
+                                "responses":{
+                                    "200":{
+                                        "description":"200 response",
+                                        "schema":{
+                                            "$ref":"#/definitions/Empty"
+                                        },
+                                        "headers":{
+                                            "Access-Control-Allow-Origin":{
+                                                "type":"string"
+                                            },
+                                            "Access-Control-Allow-Methods":{
+                                                "type":"string"
+                                            },
+                                            "Access-Control-Allow-Headers":{
+                                                "type":"string"
+                                            }
+                                        }
+                                    }
+                                },
+                                "x-amazon-apigateway-integration":{
+                                    "responses":{
+                                        "default":{
+                                            "statusCode":"200",
+                                            "responseParameters":{
+                                                "method.response.header.Access-Control-Allow-Methods":"'GET,OPTIONS'",
+                                                "method.response.header.Access-Control-Allow-Headers":"'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+                                                "method.response.header.Access-Control-Allow-Origin":"'*'"
+                                            }
+                                        }
+                                    },
+                                    "passthroughBehavior":"when_no_match",
+                                    "requestTemplates":{
+                                        "application/json":"{\"statusCode\": 200}"
+                                    },
+                                    "type":"mock"
+                                }
+                            }
+                        }
+                    },
+                    "definitions":{
+                        "Empty":{
+                            "type":"object",
+                            "title":"Empty Schema"
+                        }
+                    }
+                }
+            }
+        },
+        "SageServerAPIAuthorizer": {
+            "Type" : "AWS::ApiGateway::Authorizer",
+            "DependsOn": [
+                "SageServerAPI"
+            ],              
+            "Properties" : {
+                "Name" : "SageServerAPIAuthorizer",
+                "RestApiId" : {"Ref": "SageServerAPI"},
+                "Type" : "COGNITO_USER_POOLS",
+                "IdentitySource" : "method.request.header.Authorization",
+                "ProviderARNs" : [ {"Ref": "CognitoUserPoolArn"} ]                            
+            }
+        },                
+        "ListNotebookInstancesLambdaPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "DependsOn": [
+                "ListNotebookInstances",
+                "SageServerAPI"
+            ],
+            "Properties": {
+                "Action": "lambda:invokeFunction",
+                "FunctionName": {"Fn::GetAtt": ["ListNotebookInstances", "Arn"]},
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {"Fn::Join": ["",
+                    ["arn:aws:execute-api:", {"Ref": "AWS::Region"}, ":", {"Ref": "AWS::AccountId"}, ":", {"Ref": "SageServerAPI"}, "/*"]
+                ]}
+            }
+        },  
+        "SageServerAPIDeployment": {
+            "Type": "AWS::ApiGateway::Deployment",
+            "DependsOn": "SageServerAPI",
+            "Properties": {
+                "RestApiId": {"Ref": "SageServerAPI"},
+                "StageName": "serve",
+                "StageDescription": {
+                    "LoggingLevel": "INFO",
+                    "MetricsEnabled": "true"
+                }
+            }
+        },
+        "UpdateJavascriptConfigWithAPIFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Description" : "Adds the API endpoint to the config.js file",
+                "Handler": "index.handler",
+                "Role": {"Ref" : "LambdaS3ExecutionRoleArn"},
+                "Code": {
+                    "ZipFile" : { "Fn::Join" : ["\n", [
+                        "import json",
+                        "import boto3",
+                        "import cfnresponse",
+                        "s3 = boto3.resource('s3')",
+                        "def create(properties, physical_id):",
+                        "    bucket = properties['Bucket']",
+                        "    config_object = s3.Object(bucket, 'js/config.js').get()",
+                        "    config_data = config_object['Body'].read().decode('utf-8')",
+                        "    config_data = config_data.replace('Base URL of your API including the stage', properties['InvokeUrl'])",
+                        "    config = s3.Object(bucket,'js/config.js')",
+                        "    config.put(Body=config_data)",
+                        "    return cfnresponse.SUCCESS, None",
+                        "def update(properties, physical_id):",
+                        "    return create(properties, physical_id)",
+                        "def delete(properties, physical_id):",
+                        "    return cfnresponse.SUCCESS, physical_id",
+                        "def handler(event, context):",
+                        "    print('Received event: ' + json.dumps(event))",
+                        "    status = cfnresponse.FAILED",
+                        "    new_physical_id = None",
+                        "    try:",
+                        "        properties = event.get('ResourceProperties')",
+                        "        physical_id = event.get('PhysicalResourceId')",
+                        "        status, new_physical_id = {",
+                        "            'Create': create,",
+                        "            'Update': update,",
+                        "            'Delete': delete",
+                        "        }.get(event['RequestType'], lambda x, y: (cfnresponse.FAILED, None))(properties, physical_id)",
+                        "    except Exception as e:",
+                        "        print('Exception: ' + e)",
+                        "        status = cfnresponse.FAILED",
+                        "    finally:",
+                        "        cfnresponse.send(event, context, status, {}, new_physical_id)"
+                    ]]}
+                },
+                "Runtime": "python3.6",
+                "Timeout": "30",
+                "TracingConfig": {
+                    "Mode": "Active"
+                }
+            }
+        },
+        "UpdateConfigWithAPICustom": {
+            "Type": "Custom::ConfigFile",
+            "DependsOn": [
+                "SageServerAPIDeployment",
+                "UpdateJavascriptConfigWithAPIFunction"
+            ],
+            "Properties": {
+                "ServiceToken": { "Fn::GetAtt" : ["UpdateJavascriptConfigWithAPIFunction", "Arn"] },
+                "Bucket": {"Ref" : "HostingBucket"},
+                "InvokeUrl": {"Fn::Join": ["",
+                    ["https://", {"Ref": "SageServerAPI"}, ".execute-api.", {"Ref": "AWS::Region"}, ".amazonaws.com", "/", "serve"]
+                ]}
+            }
+        }                                      
+    },
+    "Outputs": {
+        "APIRootResource": {
+            "Description" : "Rest API root resource for Sage Server API",
+            "Value": {
+                "Fn::GetAtt": ["SageServerAPI", "RootResourceId"]
+            }
+        },
+        "APIId": {
+            "Description" : "Rest API ID for Sage Server API",
+            "Value": {
+                "Ref": "SageServerAPI"
+            }
+        },
+        "APIDeploymentId": {
+            "Description" : "Rest API Deplyment ID for Sage Server API",
+            "Value": {
+                "Ref": "SageServerAPIDeployment"
+            }
+        },
+        "APIEndpoint": {
+            "Description" : "Rest API ID for Sage Server API",
+            "Value": {"Fn::Join": ["",
+                ["https://", {"Ref": "SageServerAPI"}, ".execute-api.", {"Ref": "AWS::Region"}, ".amazonaws.com", "/", "serve"]
+            ]}
+        }           
+    }    
+}

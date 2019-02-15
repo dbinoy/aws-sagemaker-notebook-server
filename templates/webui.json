@@ -2,7 +2,7 @@
     "AWSTemplateFormatVersion": "2010-09-09",
     "Description": "Deploy the Web frontend for SageServer",
     "Parameters": {
-        "AssetBucket": {
+        "WebAssetBucket": {
             "Type": "String"
         },
         "WebAssetPrefix": {
@@ -19,24 +19,29 @@
         "WebsiteBucket": {
             "Type": "AWS::S3::Bucket",
             "Properties": {
-                "BucketName" : {"Ref" : "HostingBucket"},
-                "LifecycleConfiguration": {
-                    "Rules": [
-                        {
-                            "NoncurrentVersionExpirationInDays": 1,
-                            "Status": "Enabled"
-                        }
-                    ]
-                },
-                 "VersioningConfiguration": {
-                    "Status": "Enabled"
-                },                
+                "BucketName" : {"Ref" : "HostingBucket"},             
                 "WebsiteConfiguration": {
                     "IndexDocument": "index.html"
                 }
             },
             "DeletionPolicy" : "Retain"
-        },          
+        },    
+        "WebsiteBucketPolicy": {
+            "Type": "AWS::S3::BucketPolicy",
+            "DependsOn": "WebsiteBucket",
+            "Properties": {
+                "Bucket" : {"Ref" : "WebsiteBucket"},
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": {
+                        "Effect": "Allow",
+                        "Principal": "*",
+                        "Action": "s3:GetObject",
+                        "Resource": { "Fn::Sub" : "arn:aws:s3:::${WebsiteBucket}/*" }
+                    }
+                }
+            }
+        },              
         "CopySourceFilesFunction": {
             "Type": "AWS::Lambda::Function",
             "Properties": {
@@ -102,7 +107,7 @@
             ],              
             "Properties": {
                 "ServiceToken": { "Fn::GetAtt" : ["CopySourceFilesFunction", "Arn"] },
-                "SourceBucket": {"Ref" : "AssetBucket"},
+                "SourceBucket": {"Ref" : "WebAssetBucket"},
                 "SourceKeyPrefix": {"Ref" : "WebAssetPrefix"},
                 "Bucket": {"Ref" : "HostingBucket"}
             }

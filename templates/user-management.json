@@ -2,11 +2,6 @@
     "AWSTemplateFormatVersion": "2010-09-09",
     "Description": "Create Cognito based user management resources",
     "Parameters": {
-        "AdminUsername": {
-            "Type": "String"        },
-        "AdminEmail": {
-            "Type": "String"
-        },
         "HostingBucket": {
             "Type": "String"
         },
@@ -18,27 +13,8 @@
         "SageServerUserPool": {
             "Type" : "AWS::Cognito::UserPool",
             "Properties" : {
-                "AliasAttributes" : ["email"],
-                "AutoVerifiedAttributes" : ["email"],
+                "UsernameAttributes" : ["email"],
                 "UserPoolName" : "SageServerUserPool"
-            }
-        },
-        "AdminUser" : {
-            "Type" : "AWS::Cognito::UserPoolUser",
-            "DependsOn": [
-                "SageServerUserPool"
-            ],            
-            "Properties" : {
-                "DesiredDeliveryMediums" : [ "EMAIL" ],
-                "ForceAliasCreation" : false,
-                "Username" : {"Ref": "AdminUsername"},
-                "UserAttributes" : [ 
-                    {
-                        "Name" : "email",
-                        "Value" : {"Ref": "AdminEmail"}
-                    }                  
-                ],
-                "UserPoolId" : {"Ref": "SageServerUserPool"}
             }
         },
         "SageServerAppClient" : {
@@ -49,26 +25,7 @@
             "Properties" : {
                 "ClientName" : "SageServerAppClient",
                 "GenerateSecret" : false,
-                "RefreshTokenValidity" : 7,
                 "UserPoolId" : {"Ref": "SageServerUserPool"}
-            }
-        },
-        "SageServerIdentityPool" : {
-            "Type" : "AWS::Cognito::IdentityPool",
-            "DependsOn": [
-                "SageServerUserPool",
-                "SageServerAppClient"
-            ],                  
-            "Properties" : {
-                "IdentityPoolName" : "SageServerIdentityPool",
-                "AllowUnauthenticatedIdentities" : false, 
-                "CognitoIdentityProviders" : 
-                [ 
-                    {
-                        "ClientId" : {"Ref": "SageServerAppClient"},
-                        "ProviderName" : {"Fn::GetAtt" : ["SageServerUserPool", "ProviderName"] }
-                    }                    
-                ]
             }
         },
         "UpdateJavascriptConfigWithCognitoFunction": {
@@ -152,17 +109,17 @@
         }        
     },
     "Outputs": {
-        "SageServerUserPool": {
+        "SageServerUserPoolId": {
             "Value": {"Ref": "SageServerUserPool"},
             "Description": "Cognito User Pool Id"
         },
+        "SageServerUserPoolARN": {
+            "Value": { "Fn::GetAtt" : ["SageServerUserPool", "Arn"] },
+            "Description": "Cognito User Pool Id"
+        },        
         "SageServerAppClient": {
             "Value": {"Ref": "SageServerAppClient"},
             "Description": "App Client Id for Cognito User Pool"
-        },
-        "SageServerIdentityPool": {
-            "Value": {"Ref": "SageServerIdentityPool"},
-            "Description": "Identity Pool Id for IDP authorized by Cognito User Pool"
-        }                  
+        }                 
     }    
 }
