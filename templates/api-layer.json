@@ -65,7 +65,7 @@
                 "LambdaSMNoteBookExecutionRole"
             ],             
             "Properties": {
-                "Description" : "Invoke Comprehend to predict sentiment of feedback provided by customers.",
+                "Description" : "List all Notebook instances running on SageMaker.",
                 "Handler": "index.handler",
                 "Role": { "Fn::GetAtt" : ["LambdaSMNoteBookExecutionRole", "Arn"] },
                 "Code": {
@@ -76,7 +76,8 @@
                         "def dateconverter(o):",
                         "    if isinstance(o, datetime.datetime):",
                         "        return o.__str__()",                                
-                        "def handler(event, context):",                        
+                        "def handler(event, context):",     
+                        "    print('Received event: ' + json.dumps(event, indent=2))",
                         "    sm = boto3.client('sagemaker')",
                         "    instances = []",
                         "    nexttoken = None",
@@ -85,7 +86,8 @@
                         "        instances.extend(response['NotebookInstances'])",
                         "        nexttoken = response['NextToken'] if 'NextToken' in response.keys() else None",
                         "        if nexttoken is None:",
-                        "            break",                                
+                        "            break",     
+                        "    print('No. of Notebook Instances - {}'.format(len(instances)))",                         
                         "    return {",
                         "        'statusCode': 200,",
                         "        'body': json.dumps(instances, default=dateconverter)",
@@ -99,6 +101,41 @@
                 }
             }
         },
+        "GeneratePreSignedURL": {
+            "Type": "AWS::Lambda::Function",
+            "DependsOn": [
+                "LambdaSMNoteBookExecutionRole"
+            ],             
+            "Properties": {
+                "Description" : "Generate pre-signed URL for the named Sagemaker Notebook .",
+                "Handler": "index.handler",
+                "Role": { "Fn::GetAtt" : ["LambdaSMNoteBookExecutionRole", "Arn"] },
+                "Code": {
+                    "ZipFile" : { "Fn::Join" : ["\n", [
+                        "import json",
+                        "import boto3",                                                    
+                        "def handler(event, context):",   
+                        "    print('Received event: ' + json.dumps(event, indent=2))",
+                        "    sm = boto3.client('sagemaker')",
+                        "    instancename = event['InstanceName']",
+                        "    duration = 1800",
+                        "    if 'Duration' in event:",
+                        "        duration = int(event['Duration'])",
+                        "    url = sm.create_presigned_notebook_instance_url(NotebookInstanceName=instancename, SessionExpirationDurationInSeconds=duration)['AuthorizedUrl']",
+                        "    print('Notebook - {}, URL: {}'.format(instancename, url))",                         
+                        "    return {",
+                        "        'statusCode': 200,",
+                        "        'body': json.dumps(url)",
+                        "    }"                                               
+                    ]]}
+                },
+                "Runtime": "python3.6",
+                "Timeout": "60",
+                "TracingConfig": {
+                    "Mode": "Active"
+                }
+            }
+        },        
         "SageServerAPI": {
             "Type": "AWS::ApiGateway::RestApi",
             "DependsOn": "ListNotebookInstances",
@@ -201,7 +238,108 @@
                                     "type":"mock"
                                 }
                             }
-                        }
+                        },
+                        "/generateurlfornotebook":{
+                            "get":{
+                                "consumes":[
+                                    "application/json"
+                                ],
+                                "produces":[
+                                    "application/json"
+                                ],
+                                "parameters":[
+                                    {
+                                        "name":"InstanceName",
+                                        "in":"query",
+                                        "required":true,
+                                        "type":"string"
+                                    },
+                                    {
+                                        "name":"Duration",
+                                        "in":"query",
+                                        "required":false,
+                                        "type":"string"
+                                    }
+                                ],                                
+                                "responses":{
+                                    "200":{
+                                        "description":"200 response",
+                                        "schema":{
+                                            "$ref":"#/definitions/Empty"
+                                        },
+                                        "headers":{
+                                            "Access-Control-Allow-Origin":{
+                                                "type":"string"
+                                            }
+                                        }
+                                    }
+                                },
+                                "x-amazon-apigateway-integration":{
+                                    "responses":{
+                                        "default":{
+                                            "statusCode":"200",
+                                            "responseParameters":{
+                                                "method.response.header.Access-Control-Allow-Origin":"'*'"
+                                            }
+                                        }
+                                    },
+                                    "uri": {"Fn::Join": ["",
+                                        ["arn:aws:apigateway:", {"Ref": "AWS::Region"}, ":lambda:path/2015-03-31/functions/", {"Fn::GetAtt": ["GeneratePreSignedURL", "Arn"]}, "/invocations"]
+                                    ]},
+                                    "passthroughBehavior":"when_no_templates",
+                                    "httpMethod":"POST",
+                                    "requestTemplates":{
+                                        "application/json":"{ \"InstanceName\": \"$input.params('InstanceName')\",\"Duration\": \"$input.params('Duration')\"}"
+                                    },                                    
+                                    "contentHandling":"CONVERT_TO_TEXT",
+                                    "type":"aws"
+                                }
+                            },
+                            "options":{
+                                "consumes":[
+                                    "application/json"
+                                ],
+                                "produces":[
+                                    "application/json"
+                                ],
+                                "responses":{
+                                    "200":{
+                                        "description":"200 response",
+                                        "schema":{
+                                            "$ref":"#/definitions/Empty"
+                                        },
+                                        "headers":{
+                                            "Access-Control-Allow-Origin":{
+                                                "type":"string"
+                                            },
+                                            "Access-Control-Allow-Methods":{
+                                                "type":"string"
+                                            },
+                                            "Access-Control-Allow-Headers":{
+                                                "type":"string"
+                                            }
+                                        }
+                                    }
+                                },
+                                "x-amazon-apigateway-integration":{
+                                    "responses":{
+                                        "default":{
+                                            "statusCode":"200",
+                                            "responseParameters":{
+                                                "method.response.header.Access-Control-Allow-Methods":"'GET,OPTIONS'",
+                                                "method.response.header.Access-Control-Allow-Headers":"'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+                                                "method.response.header.Access-Control-Allow-Origin":"'*'"
+                                            }
+                                        }
+                                    },
+                                    "passthroughBehavior":"when_no_match",
+                                    "requestTemplates":{
+                                        "application/json":"{\"statusCode\": 200}"
+                                    },
+                                    "type":"mock"
+                                }
+                            }
+                        }                        
                     },
                     "definitions":{
                         "Empty":{
@@ -240,6 +378,21 @@
                 ]}
             }
         },  
+        "GeneratePreSignedURLLambdaPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "DependsOn": [
+                "GeneratePreSignedURL",
+                "SageServerAPI"
+            ],
+            "Properties": {
+                "Action": "lambda:invokeFunction",
+                "FunctionName": {"Fn::GetAtt": ["GeneratePreSignedURL", "Arn"]},
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {"Fn::Join": ["",
+                    ["arn:aws:execute-api:", {"Ref": "AWS::Region"}, ":", {"Ref": "AWS::AccountId"}, ":", {"Ref": "SageServerAPI"}, "/*"]
+                ]}
+            }
+        },          
         "SageServerAPIDeployment": {
             "Type": "AWS::ApiGateway::Deployment",
             "DependsOn": "SageServerAPI",
