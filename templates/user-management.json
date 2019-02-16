@@ -13,7 +13,8 @@
         "SageServerUserPool": {
             "Type" : "AWS::Cognito::UserPool",
             "Properties" : {
-                "UsernameAttributes" : ["email"],
+                "UsernameAttributes" : ["email", "phone_number"],
+                "AutoVerifiedAttributes": ["email"],
                 "UserPoolName" : "SageServerUserPool"
             }
         },
