@@ -72,7 +72,7 @@
                         "        elif event['RequestType'] == 'Delete':",
                         "            result = delete_objects(bucket, prefix)",
                         "    except ClientError as e:",
-                        "        logger.error('Error: '+e)",
+                        "        logger.error('Client Error: %s' % e)",
                         "        result = cfnresponse.FAILED",
                         "    cfnresponse.send(event, context, result, {})",
                         "def copy_objects(source_bucket, source_prefix, bucket, prefix):",

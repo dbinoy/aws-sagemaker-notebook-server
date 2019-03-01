@@ -1,11 +1,9 @@
-/*global WildRydes _config*/
+var NotebookServer = window.NotebookServer || {};
+NotebookServer.app = NotebookServer.app || {};
 
-var WildRydes = window.WildRydes || {};
-WildRydes.app = WildRydes.app || {};
-
-(function rideScopeWrapper($) {
+(function NotebookScopeWrapper($) {
     var authToken;
-    WildRydes.authToken.then(function setAuthToken(token) {
+    NotebookServer.authToken.then(function setAuthToken(token) {
         if (token) {
             authToken = token;
         } else {
@@ -17,7 +15,7 @@ WildRydes.app = WildRydes.app || {};
     });
     function listNoteBooks() {
         $.ajax({
-            method: 'POST',
+            method: 'GET',
             url: _config.api.invokeUrl + '/listnotebookinstances',
             headers: {
                 Authorization: authToken
@@ -32,7 +30,22 @@ WildRydes.app = WildRydes.app || {};
         });
     }    
     function renderNoteBookList(result) {
-        console.log('Response received from API: ', result);
+        notebookinstances = JSON.parse(result['body'])
+        console.log('Response received from API: ', notebookinstances);
+        for (var i in notebookinstances) {
+            notebookInstanceName = notebookinstances[i]['NotebookInstanceName']
+            $('#notebooks > tbody:last-child').append('<tr><td>' + (parseInt(i)+1) + '.&nbsp;&nbsp;</td><td>' 
+                                                                 + notebookinstances[i]['NotebookInstanceName'] + '&nbsp;&nbsp;</td><td>'
+                                                                 + notebookinstances[i]['InstanceType'] +'&nbsp;&nbsp;</td><td>'
+                                                                 + notebookinstances[i]['NotebookInstanceStatus'] +'&nbsp;&nbsp;</td></tr>');
+
+            var linkbutton = $('<button>Open '+notebookinstances[i]['NotebookInstanceName']+'</button>').click( function () { 
+                var $this = $(this);
+                str = $this.text()
+                alert(str.substring(str.search(" ")+1))
+            });
+            $("#notebooks > tbody:last-child > tr:last").append('<td></td>').find("td:last").append(linkbutton);                                                                            
+        }        
     }
 
     function requestUnicorn(pickupLocation) {
@@ -72,13 +85,13 @@ WildRydes.app = WildRydes.app || {};
         listNoteBooks();
         $('#request').click(handleRequestClick);
         $('#signOut').click(function() {
-            WildRydes.signOut();
+            NotebookServer.signOut();
             alert("You have been signed out.");
             window.location = "signin.html";
         });
-        $(WildRydes.app).on('pickupChange', handlePickupChanged);
+        $(NotebookServer.app).on('pickupChange', handlePickupChanged);
 
-        WildRydes.authToken.then(function updateAuthMessage(token) {
+        NotebookServer.authToken.then(function updateAuthMessage(token) {
             if (token) {
                 displayUpdate('You are authenticated. Click to see your <a href="#authTokenModal" data-toggle="modal">auth token</a>.');
                 $('.authToken').text(token);
@@ -97,7 +110,7 @@ WildRydes.app = WildRydes.app || {};
     }
 
     function handleRequestClick(event) {
-        var pickupLocation = WildRydes.app.selectedPoint;
+        var pickupLocation = NotebookServer.app.selectedPoint;
         event.preventDefault();
         requestUnicorn(pickupLocation);
     }
