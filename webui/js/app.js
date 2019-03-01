@@ -39,45 +39,49 @@ NotebookServer.app = NotebookServer.app || {};
                                                                  + notebookinstances[i]['InstanceType'] +'&nbsp;&nbsp;</td><td>'
                                                                  + notebookinstances[i]['NotebookInstanceStatus'] +'&nbsp;&nbsp;</td></tr>');
 
-            var linkbutton = $('<button>Open '+notebookinstances[i]['NotebookInstanceName']+'</button>').click( function () { 
+            var linkbutton = $('<button type="button" class="btn btn-info btn-lg" data-toggle="modal" data-target="#notebookModal" name='+notebookinstances[i]['NotebookInstanceName']+'>Open Notebook</button>').click( function () { 
                 var $this = $(this);
-                str = $this.text()
-                alert(str.substring(str.search(" ")+1))
+                str = $this.attr('name')
+                generateurlfornotebook(str.substring(str.search(" ")+1))
             });
-            $("#notebooks > tbody:last-child > tr:last").append('<td></td>').find("td:last").append(linkbutton);                                                                            
+            $("#notebooks > tbody:last-child > tr:last").append('<td></td>').find("td:last").append(linkbutton);     
         }        
     }
 
-    function requestUnicorn(pickupLocation) {
+    function generateurlfornotebook(instancename) {
+        $(".modal-title").text("Notebook Instance : " + instancename) 
+        $(".modal-body").text("")
         $.ajax({
-            method: 'POST',
-            url: _config.api.invokeUrl + '/ride',
+            method: 'GET',
+            url: _config.api.invokeUrl + '/generateurlfornotebook',
             headers: {
                 Authorization: authToken
             },
-            data: JSON.stringify({
-                PickupLocation: {
-                    Latitude: pickupLocation.latitude,
-                    Longitude: pickupLocation.longitude
-                }
-            }),
+            data:{
+                InstanceName: instancename
+            },
             contentType: 'application/json',
-            success: completeRequest,
+            success: opennotebook,
             error: function ajaxError(jqXHR, textStatus, errorThrown) {
-                console.error('Error requesting ride: ', textStatus, ', Details: ', errorThrown);
+                console.error('Error generating pre-signed URL: ', textStatus, ', Details: ', errorThrown);
                 console.error('Response: ', jqXHR.responseText);
-                alert('An error occured when requesting your unicorn:\n' + jqXHR.responseText);
+                alert('An error generating pre-signed URL:\n' + jqXHR.responseText);
             }
         });
     }
 
-    function completeRequest(result) {
-        var unicorn;
-        var pronoun;
-        console.log('Response received from API: ', result);
-        unicorn = result.Unicorn;
-        pronoun = unicorn.Gender === 'Male' ? 'his' : 'her';
-        displayUpdate(unicorn.Name + ', your ' + unicorn.Color + ' unicorn, is on ' + pronoun + ' way.');
+    function opennotebook(result) {
+        statuscode = JSON.parse(result['statusCode']);
+        if (statuscode == '200') {
+            instanceurl = JSON.parse(result['body']);
+            $(".modal-body").text("URL : " + instanceurl)
+            //$(".modal-body").html('<object data='+instanceurl+'/>');
+            window.open(instanceurl)
+        } else {
+            instanceurl = JSON.parse(result['body'])['Message']
+            $(".modal-body").text("Error : " + instanceurl)
+        }
+        console.log('Response received from API: ', result);        
     }
 
     // Register click handler for #request button
