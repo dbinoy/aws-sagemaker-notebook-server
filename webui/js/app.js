@@ -39,13 +39,31 @@ NotebookServer.app = NotebookServer.app || {};
                                                                  + notebookinstances[i]['InstanceType'] +'&nbsp;&nbsp;</td><td>'
                                                                  + notebookinstances[i]['NotebookInstanceStatus'] +'&nbsp;&nbsp;</td></tr>');
 
-            var linkbutton = $('<button type="button" class="btn btn-info btn-lg" data-toggle="modal" data-target="#notebookModal" name='+notebookinstances[i]['NotebookInstanceName']+'>Open Notebook</button>').click( function () { 
-                var $this = $(this);
-                str = $this.attr('name')
-                generateurlfornotebook(str.substring(str.search(" ")+1))
-            });
-            $("#notebooks > tbody:last-child > tr:last").append('<td></td>').find("td:last").append(linkbutton);     
-        }        
+            var status = notebookinstances[i]['NotebookInstanceStatus'];
+            if (status == "InService") {
+                var linkbutton = $('<button type="button" class="btn btn-info btn-lg" data-toggle="modal" data-target="#notebookModal" name='+notebookinstances[i]['NotebookInstanceName']+'>Open Notebook</button>').click( function () { 
+                    var $this = $(this);
+                    str = $this.attr('name')
+                    generateurlfornotebook(str.substring(str.search(" ")+1))
+                });
+                $("#notebooks > tbody:last-child > tr:last").append('<td></td>').find("td:last").append(linkbutton);
+            } else if (status == "Stopped") {
+                var linkbutton = $('<button type="button" class="btn btn-info btn-lg" name='+notebookinstances[i]['NotebookInstanceName']+'>Start Notebook</button>').click( function () { 
+                    var $this = $(this);
+                    str = $this.attr('name')
+                    startnotebookinstance(str.substring(str.search(" ")+1))
+                });
+                $("#notebooks > tbody:last-child > tr:last").append('<td></td>').find("td:last").append(linkbutton);                    
+            } else if (status == "Pending" || status == "Stopping"){
+                var linkbutton = $('<button type="button" class="btn btn-info btn-lg" name='+notebookinstances[i]['NotebookInstanceName']+'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Wait&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</button>').click( function () { 
+                    var $this = $(this);
+                    str = $this.attr('name')
+                });
+                $("#notebooks > tbody:last-child > tr:last").append('<td></td>').find("td:last").append(linkbutton);                    
+            }
+                 
+        }
+        $("#notebooks tr td").css('padding','5px');        
     }
 
     function generateurlfornotebook(instancename) {
@@ -65,7 +83,29 @@ NotebookServer.app = NotebookServer.app || {};
             error: function ajaxError(jqXHR, textStatus, errorThrown) {
                 console.error('Error generating pre-signed URL: ', textStatus, ', Details: ', errorThrown);
                 console.error('Response: ', jqXHR.responseText);
-                alert('An error generating pre-signed URL:\n' + jqXHR.responseText);
+                alert('An error in generating pre-signed URL:\n' + jqXHR.responseText);
+            }
+        });
+    }
+
+    function startnotebookinstance(instancename) {
+        $(".modal-title").text("Notebook Instance : " + instancename) 
+        $(".modal-body").text("")
+        $.ajax({
+            method: 'GET',
+            url: _config.api.invokeUrl + '/startnotebookinstance',
+            headers: {
+                Authorization: authToken
+            },
+            data:{
+                InstanceName: instancename
+            },
+            contentType: 'application/json',
+            success: listNoteBooks,
+            error: function ajaxError(jqXHR, textStatus, errorThrown) {
+                console.error('Error starting Notebook: ', textStatus, ', Details: ', errorThrown);
+                console.error('Response: ', jqXHR.responseText);
+                alert('An error in starting Notebook:\n' + jqXHR.responseText);
             }
         });
     }
@@ -87,13 +127,11 @@ NotebookServer.app = NotebookServer.app || {};
     // Register click handler for #request button
     $(function onDocReady() {
         listNoteBooks();
-        $('#request').click(handleRequestClick);
         $('#signOut').click(function() {
             NotebookServer.signOut();
             alert("You have been signed out.");
             window.location = "signin.html";
         });
-        $(NotebookServer.app).on('pickupChange', handlePickupChanged);
 
         NotebookServer.authToken.then(function updateAuthMessage(token) {
             if (token) {
@@ -106,18 +144,6 @@ NotebookServer.app = NotebookServer.app || {};
             $('#noApiMessage').show();
         }
     });
-
-    function handlePickupChanged() {
-        var requestButton = $('#request');
-        requestButton.text('Request Unicorn');
-        requestButton.prop('disabled', false);
-    }
-
-    function handleRequestClick(event) {
-        var pickupLocation = NotebookServer.app.selectedPoint;
-        event.preventDefault();
-        requestUnicorn(pickupLocation);
-    }
 
     function displayUpdate(text) {
         $('#updates').append($('<li>' + text + '</li>'));
