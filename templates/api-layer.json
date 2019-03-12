@@ -295,6 +295,22 @@
                     "schemes":[
                         "https"
                     ],
+
+                    "securityDefinitions": {
+                        "SageServerAPIAuthorizer": {
+                          "type": "apiKey",
+                          "name": "Authorization",
+                          "in": "header",
+                          "x-amazon-apigateway-authtype": "cognito_user_pools",
+                          "x-amazon-apigateway-authorizer": {
+                            "providerARNs": [
+                              {"Ref": "CognitoUserPoolArn"}
+                            ],
+                            "type": "cognito_user_pools"
+                            }
+                        }
+                    },
+
                     "paths":{
                         "/listnotebookinstances":{
                             "get":{
@@ -303,6 +319,11 @@
                                 ],
                                 "produces":[
                                     "application/json"
+                                ],
+                                "security": [
+                                    {
+                                      "SageServerAPIAuthorizer": []
+                                    }
                                 ],
                                 "responses":{
                                     "200":{
@@ -387,6 +408,11 @@
                                 ],
                                 "produces":[
                                     "application/json"
+                                ],
+                                "security": [
+                                    {
+                                      "SageServerAPIAuthorizer": []
+                                    }
                                 ],
                                 "parameters":[
                                     {
@@ -489,7 +515,12 @@
                                 ],
                                 "produces":[
                                     "application/json"
-                                ],              
+                                ],   
+                                "security": [
+                                    {
+                                      "SageServerAPIAuthorizer": []
+                                    }
+                                ],           
                                 "responses":{
                                     "200":{
                                         "description":"200 response",
@@ -575,6 +606,11 @@
                                 ],
                                 "produces":[
                                     "application/json"
+                                ],
+                                "security": [
+                                    {
+                                      "SageServerAPIAuthorizer": []
+                                    }
                                 ],
                                 "parameters":[
                                     {
@@ -672,20 +708,7 @@
                     }
                 }
             }
-        },
-        "SageServerAPIAuthorizer": {
-            "Type" : "AWS::ApiGateway::Authorizer",
-            "DependsOn": [
-                "SageServerAPI"
-            ],              
-            "Properties" : {
-                "Name" : "SageServerAPIAuthorizer",
-                "RestApiId" : {"Ref": "SageServerAPI"},
-                "Type" : "COGNITO_USER_POOLS",
-                "IdentitySource" : "method.request.header.Authorization",
-                "ProviderARNs" : [ {"Ref": "CognitoUserPoolArn"} ]                            
-            }
-        },                
+        },             
         "ListNotebookInstancesLambdaPermission": {
             "Type": "AWS::Lambda::Permission",
             "DependsOn": [
