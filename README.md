@@ -1,7 +1,7 @@
 # aws-sagemaker-notebook-server
 
 
-![Solution Architecutre](./Socrata-notebooks(2).svg)
+![Solution Architecutre](./Managed-notebooks.svg)
 
 
 
