@@ -1,5 +1,10 @@
 # aws-sagemaker-notebook-server
 
+
+![Solution Architecutre](./Socrata-notebooks(2).svg)
+
+
+
 Region| Launch
 ------|-----
 US East (N. Virginia) | [![Launch SageServer in us-east-1](http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/images/cloudformation-launch-stack-button.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/new?stackName=SageServer&templateURL=https://s3.amazonaws.com/sageserver-web-assets/templates/master.json)
